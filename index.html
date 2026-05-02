@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sokak Savaşı | V1.1</title>
+    <title>Sokak Savaşı | V1.2</title>
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
@@ -11,41 +11,75 @@
         body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
-        /* Üst Bilgi Paneli */
+        /* Sol Üst Bilgi Paneli */
         .ui-panel {
-            position: absolute; top: 10px; left: 10px; right: 10px;
-            background: rgba(20, 20, 20, 0.85); color: white;
-            padding: 15px; border-radius: 15px; z-index: 10;
-            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(255, 255, 255, 0.9); color: #333;
+            padding: 10px 15px; border-radius: 12px; z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); border: 2px solid #00d2ff;
         }
-        .stats { display: flex; justify-content: space-between; font-size: 13px; }
-        .score { font-size: 18px; font-weight: bold; color: #00d2ff; margin-top: 5px; }
+        .stats { font-size: 13px; font-weight: bold; }
+        .score { font-size: 16px; font-weight: 900; color: #00d2ff; margin-top: 5px; }
         
+        /* Sağ Üst Profil Butonu */
+        .profile-btn {
+            position: absolute; top: 10px; right: 10px;
+            width: 50px; height: 50px;
+            background: #fff; border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 10; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+            border: 3px solid #00d2ff; overflow: hidden;
+        }
+        .profile-btn img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Profil Modalı (Açılır Pencere) */
+        .overlay {
+            display: none; position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 15;
+            backdrop-filter: blur(3px);
+        }
+        .profile-modal {
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%; max-width: 320px;
+            background: white; border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 20; padding: 25px 20px; text-align: center; color: #333;
+        }
+        .overlay.active, .profile-modal.active { display: block; }
+        
+        .close-btn {
+            position: absolute; top: 10px; right: 15px;
+            font-size: 24px; cursor: pointer; color: #888; font-weight: bold;
+        }
+        .profile-avatar-large {
+            width: 90px; height: 90px; background: #eee;
+            border-radius: 50%; margin: 0 auto 15px; border: 4px solid #00d2ff;
+            background-image: url('https://api.dicebear.com/7.x/avataaars/svg?seed=SokakSavasi');
+            background-size: cover;
+        }
+        .username-input {
+            border: none; border-bottom: 2px solid #00d2ff;
+            font-size: 20px; text-align: center; font-weight: bold; outline: none;
+            width: 80%; margin-bottom: 20px; color: #333; padding-bottom: 5px;
+        }
+        .profile-stats {
+            display: flex; justify-content: space-around;
+            background: #f4f4f4; padding: 15px; border-radius: 10px;
+        }
+        .stat-box { display: flex; flex-direction: column; }
+        .stat-val { font-size: 22px; font-weight: 900; color: #00d2ff; }
+        .stat-label { font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;}
+
         /* Sağ Alt Konum Butonu */
         .locate-btn {
-            position: absolute;
-            bottom: 40px;
-            right: 20px;
-            width: 55px;
-            height: 55px;
-            background-color: #00d2ff;
-            border: none;
-            border-radius: 50%;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            z-index: 10;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            position: absolute; bottom: 40px; right: 20px;
+            width: 55px; height: 55px; background-color: #00d2ff;
+            border: none; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 10; cursor: pointer; display: flex; justify-content: center; align-items: center;
         }
-        .locate-btn svg {
-            width: 28px;
-            height: 28px;
-            fill: #141414; /* İkon rengi */
-        }
-        .locate-btn:active {
-            transform: scale(0.95);
-        }
+        .locate-btn svg { width: 28px; height: 28px; fill: white; }
     </style>
 </head>
 <body>
@@ -53,11 +87,12 @@
 <div id="map"></div>
 
 <div class="ui-panel">
-    <div class="stats">
-        <span id="status">Konum izni bekleniyor...</span>
-        <span>Bölgelerim: <b id="area-count">0</b></span>
-    </div>
     <div class="score">SOKAK SAVAŞI</div>
+    <div class="stats" id="status">Konum aranıyor...</div>
+</div>
+
+<div class="profile-btn" onclick="toggleProfile()">
+    <img id="btn-avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=SokakSavasi" alt="Profil">
 </div>
 
 <button class="locate-btn" onclick="centerToLocation()">
@@ -66,28 +101,51 @@
     </svg>
 </button>
 
+<div class="overlay" id="overlay" onclick="toggleProfile()"></div>
+<div class="profile-modal" id="profile-modal">
+    <div class="close-btn" onclick="toggleProfile()">×</div>
+    <div class="profile-avatar-large" id="modal-avatar"></div>
+    <input type="text" class="username-input" id="username" placeholder="Adını Gir" onchange="saveProfile()" maxlength="12">
+    
+    <div class="profile-stats">
+        <div class="stat-box">
+            <span class="stat-val" id="level-display">1</span>
+            <span class="stat-label">Seviye</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-val" id="area-display">0</span>
+            <span class="stat-label">Bölge</span>
+        </div>
+    </div>
+</div>
+
 <script>
-    // SENİN TOKENIN
+    // MAPBOX TOKEN
     mapboxgl.accessToken = 'pk.eyJ1Ijoic3RyZWV0LXdhciIsImEiOiJjbW9vNnM5Nmcwd3N0MnNzNHc2YXRuazBwIn0.FcDgSGYd4lyEKtusZPEphg';
 
+    // HARİTA STİLİ: TAMAMEN BEYAZ/AYDINLIK (light-v11)
     const map = new mapboxgl.Map({
         container: 'map',
-        style: 'mapbox://styles/mapbox/streets-v12', // Gündüz/Aydınlık sokak haritası yapıldı
-        center: [28.9784, 41.0082], // Başlangıç olarak İstanbul
+        style: 'mapbox://styles/mapbox/light-v11', 
+        center: [28.9784, 41.0082], 
         zoom: 12,
-        pitch: 45 // 3D yatıklık hissi
+        pitch: 45
     });
 
-    let myCapturedZones = new Set();
     const gridSize = 0.03; // Yaklaşık 30 metre
-    let lastLocation = null; // Son bilinen konumu hafızada tutacak
-    let isFirstLocationFound = false; // İlk açılışta kamerayı götürmek için
-    
-    // Oyuncunun yerini gösterecek kırmızı nokta
+    let lastLocation = null; 
+    let isFirstLocationFound = false; 
     let userMarker = new mapboxgl.Marker({ color: '#ff4757' }); 
 
+    // OYUNCU VERİLERİ (Local Storage'dan Yükle)
+    let myCapturedZones = new Set(JSON.parse(localStorage.getItem('zones')) || []);
+    let username = localStorage.getItem('username') || 'Oyuncu' + Math.floor(Math.random()*1000);
+
+    // Profil Başlangıç Ayarları
+    document.getElementById('username').value = username;
+    updateProfileUI();
+
     map.on('load', () => {
-        // Mavi boyalı bölgeler katmanı
         map.addSource('captured-zones', {
             'type': 'geojson',
             'data': { 'type': 'FeatureCollection', 'features': [] }
@@ -99,12 +157,14 @@
             'source': 'captured-zones',
             'paint': {
                 'fill-color': '#00d2ff',
-                'fill-opacity': 0.5,
-                'fill-outline-color': '#0055ff'
+                'fill-opacity': 0.6,
+                'fill-outline-color': '#0077ff'
             }
         });
 
-        // Site yüklendiğinde konum takibini başlat
+        // Varsa eski bölgeleri haritaya çiz
+        if(myCapturedZones.size > 0) updateMapGrid();
+
         startTracking();
     });
 
@@ -114,68 +174,73 @@
                 const { latitude, longitude } = pos.coords;
                 lastLocation = [longitude, latitude];
                 
-                // Kırmızı noktayı senin konumuna koy
                 userMarker.setLngLat(lastLocation).addTo(map);
 
-                // GPS ilk defa bağlandıysa hemen oraya zoom yap
                 if (!isFirstLocationFound) {
                     map.flyTo({ center: lastLocation, zoom: 17, speed: 1.5 });
                     isFirstLocationFound = true;
                 }
 
-                // Grid (Kare Boyama) Mantığı
+                // Kare Boyama
                 const gridX = Math.floor(longitude / (gridSize / 111)) * (gridSize / 111);
                 const gridY = Math.floor(latitude / (gridSize / 111)) * (gridSize / 111);
                 const zoneId = `${gridX},${gridY}`;
 
                 if (!myCapturedZones.has(zoneId)) {
                     myCapturedZones.add(zoneId);
+                    localStorage.setItem('zones', JSON.stringify(Array.from(myCapturedZones))); // Veriyi Kaydet
                     updateMapGrid();
+                    updateProfileUI(); // Puanı Güncelle
                 }
 
-                document.getElementById('status').innerText = "Bağlandı, bölge aranıyor...";
-                document.getElementById('area-count').innerText = myCapturedZones.size;
+                document.getElementById('status').innerText = "Bağlandı, Aktif.";
 
             }, (err) => {
-                // Eğer kullanıcı izin vermezse veya GPS kapalıysa
-                if(err.code === 1) {
-                    document.getElementById('status').innerText = "HATA: Konum İzni Reddedildi!";
-                } else {
-                    document.getElementById('status').innerText = "GPS Sinyali Aranıyor...";
-                }
+                document.getElementById('status').innerText = "Konum bekleniyor...";
             }, { enableHighAccuracy: true });
-        } else {
-            document.getElementById('status').innerText = "Tarayıcı GPS desteklemiyor.";
         }
     }
 
-    // Butona tıklandığında kamerayı konuma uçuran fonksiyon
     function centerToLocation() {
         if (lastLocation) {
             map.flyTo({ center: lastLocation, zoom: 18, speed: 1.2 });
-        } else {
-            alert("Konumun henüz bulunamadı! Tarayıcından konum izni verdiğine ve telefonunun GPS (Konum) özelliğinin açık olduğuna emin ol.");
         }
     }
 
-    // Haritayı boyama fonksiyonu
     function updateMapGrid() {
         const features = Array.from(myCapturedZones).map(id => {
             const [x, y] = id.split(',').map(Number);
             const offset = gridSize / 111;
-            return turf.polygon([[
-                [x, y],
-                [x + offset, y],
-                [x + offset, y + offset],
-                [x, y + offset],
-                [x, y]
-            ]]);
+            return turf.polygon([[ [x, y], [x + offset, y], [x + offset, y + offset], [x, y + offset], [x, y] ]]);
         });
+        map.getSource('captured-zones').setData({ 'type': 'FeatureCollection', 'features': features });
+    }
 
-        map.getSource('captured-zones').setData({
-            'type': 'FeatureCollection',
-            'features': features
-        });
+    // PROFIL FONKSIYONLARI
+    function toggleProfile() {
+        document.getElementById('profile-modal').classList.toggle('active');
+        document.getElementById('overlay').classList.toggle('active');
+    }
+
+    function saveProfile() {
+        username = document.getElementById('username').value || 'İsimsiz';
+        localStorage.setItem('username', username);
+        // İsme göre dinamik avatar resmi oluşturur
+        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+        document.getElementById('btn-avatar').src = avatarUrl;
+        document.getElementById('modal-avatar').style.backgroundImage = `url('${avatarUrl}')`;
+    }
+
+    function updateProfileUI() {
+        const zones = myCapturedZones.size;
+        const level = Math.floor(zones / 10) + 1; // Her 10 bölgede 1 seviye atla
+        
+        document.getElementById('area-display').innerText = zones;
+        document.getElementById('level-display').innerText = level;
+        
+        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+        document.getElementById('btn-avatar').src = avatarUrl;
+        document.getElementById('modal-avatar').style.backgroundImage = `url('${avatarUrl}')`;
     }
 </script>
 </body>
