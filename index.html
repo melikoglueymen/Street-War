@@ -3,300 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sokak Savaşı | Satellite Pro</title>
+    <title>Sokak Savaşı | Canlı Multiplayer</title>
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <style>
-        :root { --blue: #00d2ff; --red: #ff4757; --dark: #121212; }
-        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Roboto, sans-serif; background: #000; }
+        :root { --p: #00d2ff; }
+        body { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-
-        /* Üst HUD */
-        .hud-top {
-            position: absolute; top: 12px; left: 12px; right: 12px;
-            display: flex; justify-content: space-between; align-items: flex-start;
-            z-index: 10; pointer-events: none;
-        }
-        .profile-card {
-            background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
-            padding: 8px 15px; border-radius: 15px; border-left: 4px solid var(--blue);
-            color: white; pointer-events: auto; min-width: 120px;
-        }
-        .xp-bar { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
-        .xp-fill { width: 30%; height: 100%; background: var(--blue); transition: width 0.3s; }
-
-        /* Sağ Alt Kontroller */
-        .controls-right {
-            position: absolute; bottom: 30px; right: 15px;
-            display: flex; flex-direction: column; gap: 15px; z-index: 10;
-        }
-        .btn-round {
-            width: 55px; height: 55px; background: white; border-radius: 50%;
-            display: flex; justify-content: center; align-items: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4); border: none; cursor: pointer;
-        }
-        .btn-main { background: var(--blue); color: white; transform: scale(1.1); }
-
-        /* Alt Veri Paneli */
-        .data-strip {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: linear-gradient(transparent, rgba(0,0,0,0.9));
-            padding: 40px 20px 10px; color: white; display: flex;
-            justify-content: space-around; font-size: 12px; text-align: center;
-        }
-        .data-val { font-size: 18px; font-weight: bold; display: block; color: var(--blue); }
-
-        /* Gelişmiş Profil Modalı */
-        .modal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--dark); z-index: 100; color: white; overflow-y: auto;
-        }
-        .modal.active { display: block; }
-        .modal-content { padding: 25px; }
-        .close-x { float: right; font-size: 30px; color: #888; }
         
-        .profile-header { text-align: center; margin-bottom: 30px; }
-        .avatar-l { 
-            width: 100px; height: 100px; background: #222; border-radius: 50%; 
-            margin: 0 auto 10px; border: 3px solid var(--blue); 
-        }
+        .hud { position: absolute; z-index: 10; pointer-events: none; width: 100%; padding: 15px; box-sizing: border-box; }
+        .top-ui { display: flex; justify-content: space-between; }
+        .glass { background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); color: white; padding: 12px; border-radius: 15px; border: 1px solid var(--p); pointer-events: auto; }
         
-        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
-        .stat-card { background: #1e1e1e; padding: 15px; border-radius: 12px; border: 1px solid #333; }
-        
-        .input-group { margin-bottom: 20px; }
-        .input-group label { display: block; font-size: 12px; color: #888; margin-bottom: 5px; }
-        .input-group input, .input-group select {
-            width: 100%; background: #222; border: 1px solid #444; padding: 12px;
-            color: white; border-radius: 8px; box-sizing: border-box;
-        }
+        .color-bar { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; pointer-events: auto; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 25px; }
+        .dot { width: 35px; height: 35px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; transition: 0.2s; }
+        .dot:active { transform: scale(0.8); }
 
-        .team-picker { display: flex; gap: 10px; }
-        .team-opt { 
-            flex: 1; padding: 15px; border-radius: 10px; text-align: center; 
-            border: 2px solid #333; font-weight: bold; 
-        }
-        .opt-blue.active { border-color: var(--blue); background: rgba(0,210,255,0.1); }
-        .opt-red.active { border-color: var(--red); background: rgba(255,71,87,0.1); }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; color: white; padding: 30px; }
+        .modal.active { display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .input-st { width: 100%; max-width: 300px; padding: 15px; margin: 20px 0; background: #222; border: 1px solid #444; color: white; border-radius: 10px; text-align: center; font-size: 18px; }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<div class="hud-top">
-    <div class="profile-card" onclick="openModal()">
-        <div style="font-size: 14px;"><b id="name-hud">Oyuncu</b> <small id="lv-hud">Lv.1</small></div>
-        <div class="xp-bar"><div id="xp-fill" class="xp-fill"></div></div>
+<div class="hud top-ui">
+    <div class="glass" onclick="document.getElementById('p-modal').classList.add('active')">
+        <b id="nick-disp">Savaşçı</b> <br>
+        <small id="area-count">Bölgelerim: 0</small>
     </div>
-    <div class="profile-card" style="border-left: 4px solid #fff;">
-        <span id="speed-hud">0</span> <small>km/s</small>
+    <div class="glass">
+        <span id="speed-disp">0</span> <small>km/s</small>
     </div>
 </div>
 
-<div class="data-strip">
-    <div><span class="data-val" id="area-val">0</span>BÖLGE</div>
-    <div><span class="data-val" id="dist-val">0.0</span>KM YOL</div>
-    <div><span class="data-val" id="kcal-val">0</span>KCAL</div>
-</div>
+<div class="color-bar" id="palette"></div>
 
-<div class="controls-right">
-    <button class="btn-round" onclick="toggleStyle()">🛰️</button>
-    <button class="btn-round btn-main" onclick="centerToLocation()">📍</button>
-</div>
-
-<div id="profileModal" class="modal">
-    <div class="modal-content">
-        <span class="close-x" onclick="closeModal()">×</span>
-        <div class="profile-header">
-            <div class="avatar-l" id="avatar-img"></div>
-            <h2 id="name-display">Karakter Adı</h2>
-        </div>
-
-        <div class="input-group">
-            <label>OYUNCU ADI</label>
-            <input type="text" id="name-input" placeholder="Adını yaz..." onchange="saveProfile()">
-        </div>
-
-        <div class="stat-grid">
-            <div class="stat-card">
-                <small>MAX HIZ</small>
-                <div class="data-val" id="max-speed-val">0</div>
-            </div>
-            <div class="stat-card">
-                <small>TOPLAM SÜRE</small>
-                <div class="data-val" id="time-val">0 dk</div>
-            </div>
-        </div>
-
-        <div class="input-group">
-            <label>TAKIMIN</label>
-            <div class="team-picker">
-                <div id="btn-blue" class="team-opt opt-blue" onclick="changeTeam('blue')">MAVİ</div>
-                <div id="btn-red" class="team-opt opt-red" onclick="changeTeam('red')">KIRMIZI</div>
-            </div>
-        </div>
-
-        <div class="input-group">
-            <label>TİTREŞİM (HAPTIC)</label>
-            <select id="vibrate-opt" onchange="saveProfile()">
-                <option value="on">Açık</option>
-                <option value="off">Kapalı</option>
-            </select>
-        </div>
-
-        <button onclick="resetGame()" style="width:100%; padding:15px; background:none; border:1px solid #ff4757; color:#ff4757; border-radius:10px; margin-top:20px;">VERİLERİ TEMİZLE</button>
-    </div>
+<div id="p-modal" class="modal">
+    <h2>KARAKTERİNİ OLUŞTUR</h2>
+    <input type="text" id="nick-in" class="input-st" placeholder="Takma Adın...">
+    <button onclick="saveProfile()" class="glass" style="width:200px; background:var(--p); color:black; font-weight:bold;">BAŞLA</button>
 </div>
 
 <script>
-    // TOKEN VE AYARLAR
-    mapboxgl.accessToken = 'pk.eyJ1Ijoic3RyZWV0LXdhciIsImEiOiJjbW9vNnM5Nmcwd3N0MnNzNHc2YXRuazBwIn0.FcDgSGYd4lyEKtusZPEphg';
-
-    let userData = JSON.parse(localStorage.getItem('sw_data')) || {
-        name: 'SokakSavascisi',
-        team: 'blue',
-        zones: [],
-        dist: 0,
-        maxSpeed: 0,
-        vibrate: 'on',
-        startTime: Date.now()
+    // --- SENİN ÖZEL FİREBASE YAPILANDIRMAN ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyALFQsXRYUTTdEdZ_535gUR34mcTEKEqco",
+      authDomain: "street-war-d530a.firebaseapp.com",
+      databaseURL: "https://street-war-d530a-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "street-war-d530a",
+      storageBucket: "street-war-d530a.firebasestorage.app",
+      messagingSenderId: "66586237765",
+      appId: "1:66586237765:web:fcc218ef41a288d765fc2c",
+      measurementId: "G-G1EJFXXZ1N"
     };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    
+    // Benzersiz kullanıcı ID'si
+    const myId = localStorage.getItem('sw_uid') || 'u' + Math.floor(Math.random()*100000);
+    localStorage.setItem('sw_uid', myId);
+
+    // Mapbox Token
+    mapboxgl.accessToken = 'pk.eyJ1Ijoic3RyZWV0LXdhciIsImEiOiJjbW9vNnM5Nmcwd3N0MnNzNHc2YXRuazBwIn0.FcDgSGYd4lyEKtusZPEphg';
+    
+    let myColor = localStorage.getItem('sw_color') || '#00d2ff';
+    let myTrail = [];
+    let lastPos = null;
+    let markers = {};
 
     const map = new mapboxgl.Map({
         container: 'map',
-        style: 'mapbox://styles/mapbox/satellite-streets-v12', // UYDU GÖRÜNÜMÜ
+        style: 'mapbox://styles/mapbox/satellite-streets-v12',
         center: [28.9784, 41.0082],
-        zoom: 16,
-        pitch: 50,
-        antialias: true
+        zoom: 17,
+        pitch: 50
     });
-
-    let lastCoord = null;
-    let userMarker = new mapboxgl.Marker({ color: userData.team === 'blue' ? '#00d2ff' : '#ff4757' });
-    let isSatellite = true;
 
     map.on('load', () => {
-        // Bölge katmanı
-        map.addSource('zones', { 'type': 'geojson', 'data': { 'type': 'FeatureCollection', 'features': [] } });
-        map.addLayer({
-            'id': 'z-layer', 'type': 'fill', 'source': 'zones',
-            'paint': { 
-                'fill-color': userData.team === 'blue' ? '#00d2ff' : '#ff4757', 
-                'fill-opacity': 0.5,
-                'fill-outline-color': '#fff'
-            }
-        });
+        // Çizgi ve Bölge Katmanları
+        map.addSource('my-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
+        map.addLayer({ id: 'trail-line', type: 'line', source: 'my-trail', paint: { 'line-color': myColor, 'line-width': 4, 'line-dasharray': [2, 1] }});
 
-        updateUI();
-        renderZones();
-        startTracking();
+        map.addSource('zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }});
+        map.addLayer({ id: 'zone-fill', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.4 }});
+
+        initGame();
     });
+
+    function initGame() {
+        if(!localStorage.getItem('sw_nick')) {
+            document.getElementById('p-modal').classList.add('active');
+        } else {
+            document.getElementById('nick-disp').innerText = localStorage.getItem('sw_nick');
+            startTracking();
+            syncMultiplayer();
+        }
+        setupColors();
+        document.documentElement.style.setProperty('--p', myColor);
+    }
 
     function startTracking() {
         navigator.geolocation.watchPosition(pos => {
-            const { latitude, longitude, speed } = pos.coords;
-            const current = [longitude, latitude];
-            
-            // Hız Analizi
-            let kmh = speed ? Math.round(speed * 3.6) : 0;
-            document.getElementById('speed-hud').innerText = kmh;
-            if(kmh > userData.maxSpeed) userData.maxSpeed = kmh;
+            const coord = [pos.coords.longitude, pos.coords.latitude];
+            const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+            document.getElementById('speed-disp').innerText = speed;
 
-            // Mesafe ve Kalori
-            if (lastCoord) {
-                let d = turf.distance(lastCoord, current);
-                if (d > 0.003) { 
-                    userData.dist += d;
-                    saveProfile();
+            if (lastPos) {
+                if (turf.distance(lastPos, coord) > 0.002) { // 2 metre hareket
+                    myTrail.push(coord);
+                    checkLoop(coord);
+                    updateTrailUI();
                 }
-            }
-            lastCoord = current;
-            userMarker.setLngLat(current).addTo(map);
-
-            // Bölge Kapma (Grid)
-            const g = 0.03 / 111;
-            const gx = Math.floor(longitude / g) * g;
-            const gy = Math.floor(latitude / g) * g;
-            const id = `${gx},${gy}`;
-
-            if (!userData.zones.includes(id)) {
-                userData.zones.push(id);
-                if(userData.vibrate === 'on' && window.navigator.vibrate) window.navigator.vibrate(100);
-                saveProfile();
-                renderZones();
-            }
-            updateUI();
+            } else { map.flyTo({center: coord}); }
+            
+            lastPos = coord;
+            // Konumunu Firebase'e gönder
+            db.ref('players/' + myId).set({ 
+                pos: coord, 
+                color: myColor, 
+                nick: localStorage.getItem('sw_nick'),
+                ts: Date.now()
+            });
         }, null, { enableHighAccuracy: true });
     }
 
-    function renderZones() {
-        const features = userData.zones.map(id => {
-            const [x, y] = id.split(',').map(Number);
-            const g = 0.03 / 111;
-            return turf.polygon([[[x,y],[x+g,y],[x+g,y+g],[x,y+g],[x,y]]]);
+    function checkLoop(current) {
+        if (myTrail.length < 8) return;
+        const distToStart = turf.distance(current, myTrail[0]);
+
+        if (distToStart < 0.012) { // Başlangıca 12 metre yaklaşınca kapat
+            const poly = turf.polygon([[...myTrail, myTrail[0]]]);
+            db.ref('zones/' + myId + '_' + Date.now()).set({ 
+                geo: poly.geometry, 
+                color: myColor, 
+                owner: myId 
+            });
+            myTrail = [];
+            if(navigator.vibrate) navigator.vibrate(150);
+        }
+    }
+
+    function syncMultiplayer() {
+        // Bölgeleri güncelle
+        db.ref('zones').on('value', snap => {
+            const val = snap.val() || {};
+            const feats = Object.values(val).map(z => ({ 
+                type: 'Feature', 
+                geometry: z.geo, 
+                properties: { color: z.color }
+            }));
+            map.getSource('zones').setData({ type: 'FeatureCollection', features: feats });
+            
+            const myZoneCount = feats.filter(f => f.properties.owner === myId).length;
+            document.getElementById('area-count').innerText = "Bölgelerim: " + myZoneCount;
         });
-        map.getSource('zones').setData({ 'type': 'FeatureCollection', 'features': features });
+
+        // Diğer oyuncuları haritada göster
+        db.ref('players').on('value', snap => {
+            const players = snap.val() || {};
+            Object.keys(players).forEach(id => {
+                if(id === myId) return;
+                const p = players[id];
+                if(!markers[id]) {
+                    markers[id] = new mapboxgl.Marker({ color: p.color })
+                        .setLngLat(p.pos)
+                        .setPopup(new mapboxgl.Popup().setText(p.nick))
+                        .addTo(map);
+                } else {
+                    markers[id].setLngLat(p.pos);
+                }
+            });
+        });
     }
 
-    function updateUI() {
-        document.getElementById('name-hud').innerText = userData.name;
-        document.getElementById('area-val').innerText = userData.zones.length;
-        document.getElementById('dist-val').innerText = userData.dist.toFixed(1);
-        document.getElementById('kcal-val').innerText = Math.round(userData.dist * 60); // Ort. yürüyüş kcal
-        
-        let lv = Math.floor(userData.zones.length / 10) + 1;
-        document.getElementById('lv-hud').innerText = "Lv." + lv;
-        let progress = (userData.zones.length % 10) * 10;
-        document.getElementById('xp-fill').style.width = progress + "%";
-        
-        // Modal içi istatistikler
-        document.getElementById('max-speed-val').innerText = userData.maxSpeed;
-        let mins = Math.floor((Date.now() - userData.startTime) / 60000);
-        document.getElementById('time-val').innerText = mins + " dk";
+    function setupColors() {
+        const colors = ['#00d2ff', '#ff4757', '#2ecc71', '#f1c40f', '#9b59b6', '#ff9f43'];
+        const bar = document.getElementById('palette');
+        colors.forEach(c => {
+            const d = document.createElement('div');
+            d.className = 'dot';
+            d.style.background = c;
+            d.onclick = () => { 
+                myColor = c; 
+                localStorage.setItem('sw_color', c);
+                location.reload(); 
+            };
+            bar.appendChild(d);
+        });
     }
 
-    // FONKSİYONLAR
-    function openModal() {
-        document.getElementById('name-input').value = userData.name;
-        document.getElementById('vibrate-opt').value = userData.vibrate;
-        document.getElementById('name-display').innerText = userData.name;
-        document.getElementById('btn-blue').className = 'team-opt opt-blue ' + (userData.team === 'blue' ? 'active' : '');
-        document.getElementById('btn-red').className = 'team-opt opt-red ' + (userData.team === 'red' ? 'active' : '');
-        document.getElementById('profileModal').classList.add('active');
+    function updateTrailUI() {
+        if(myTrail.length > 1) {
+            map.getSource('my-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: myTrail }});
+        }
     }
-    
-    function closeModal() { document.getElementById('profileModal').classList.remove('active'); }
 
     function saveProfile() {
-        userData.name = document.getElementById('name-input').value || 'Savaşçı';
-        userData.vibrate = document.getElementById('vibrate-opt').value;
-        localStorage.setItem('sw_data', JSON.stringify(userData));
-        updateUI();
-    }
-
-    function changeTeam(t) {
-        userData.team = t;
-        let color = t === 'blue' ? '#00d2ff' : '#ff4757';
-        userMarker.getElement().children[0].children[0].setAttribute('fill', color);
-        if(map.getLayer('z-layer')) map.setPaintProperty('z-layer', 'fill-color', color);
-        saveProfile();
-        openModal(); // UI'ı tazele
-    }
-
-    function toggleStyle() {
-        isSatellite = !isSatellite;
-        map.setStyle(isSatellite ? 'mapbox://styles/mapbox/satellite-streets-v12' : 'mapbox://styles/mapbox/streets-v12');
-    }
-
-    function centerToLocation() { if(lastCoord) map.flyTo({center: lastCoord, zoom: 18, pitch: 60}); }
-    
-    function resetGame() {
-        if(confirm("Tüm ilerlemen silinecek, emin misin?")) {
-            localStorage.removeItem('sw_data');
-            location.reload();
-        }
+        const n = document.getElementById('nick-in').value || 'Savaşçı';
+        localStorage.setItem('sw_nick', n);
+        location.reload();
     }
 </script>
 </body>
