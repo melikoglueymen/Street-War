@@ -3,21 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sokak Savaşı | V1.0</title>
+    <title>Sokak Savaşı | V1.1</title>
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Üst Bilgi Paneli */
         .ui-panel {
             position: absolute; top: 10px; left: 10px; right: 10px;
             background: rgba(20, 20, 20, 0.85); color: white;
             padding: 15px; border-radius: 15px; z-index: 10;
             backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
         }
-        .stats { display: flex; justify-content: space-between; font-size: 12px; }
+        .stats { display: flex; justify-content: space-between; font-size: 13px; }
         .score { font-size: 18px; font-weight: bold; color: #00d2ff; margin-top: 5px; }
+        
+        /* Sağ Alt Konum Butonu */
+        .locate-btn {
+            position: absolute;
+            bottom: 40px;
+            right: 20px;
+            width: 55px;
+            height: 55px;
+            background-color: #00d2ff;
+            border: none;
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 10;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .locate-btn svg {
+            width: 28px;
+            height: 28px;
+            fill: #141414; /* İkon rengi */
+        }
+        .locate-btn:active {
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body>
@@ -26,11 +54,17 @@
 
 <div class="ui-panel">
     <div class="stats">
-        <span id="status">Sinyal bekleniyor...</span>
+        <span id="status">Konum izni bekleniyor...</span>
         <span>Bölgelerim: <b id="area-count">0</b></span>
     </div>
     <div class="score">SOKAK SAVAŞI</div>
 </div>
+
+<button class="locate-btn" onclick="centerToLocation()">
+    <svg viewBox="0 0 24 24">
+        <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+    </svg>
+</button>
 
 <script>
     // SENİN TOKENIN
@@ -38,20 +72,22 @@
 
     const map = new mapboxgl.Map({
         container: 'map',
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: [28.9784, 41.0082],
-        zoom: 17,
-        pitch: 60
+        style: 'mapbox://styles/mapbox/streets-v12', // Gündüz/Aydınlık sokak haritası yapıldı
+        center: [28.9784, 41.0082], // Başlangıç olarak İstanbul
+        zoom: 12,
+        pitch: 45 // 3D yatıklık hissi
     });
 
-    let myCapturedZones = new Set(); // Ele geçirilen karelerin ID'leri
-    const gridSize = 0.03; // Yaklaşık 30 metrelik kareler
+    let myCapturedZones = new Set();
+    const gridSize = 0.03; // Yaklaşık 30 metre
+    let lastLocation = null; // Son bilinen konumu hafızada tutacak
+    let isFirstLocationFound = false; // İlk açılışta kamerayı götürmek için
+    
+    // Oyuncunun yerini gösterecek kırmızı nokta
+    let userMarker = new mapboxgl.Marker({ color: '#ff4757' }); 
 
     map.on('load', () => {
-        // GPS İzleme Başlat
-        startTracking();
-        
-        // Harita üzerine boyanan yerler için katman oluştur
+        // Mavi boyalı bölgeler katmanı
         map.addSource('captured-zones', {
             'type': 'geojson',
             'data': { 'type': 'FeatureCollection', 'features': [] }
@@ -62,37 +98,68 @@
             'type': 'fill',
             'source': 'captured-zones',
             'paint': {
-                '巷-color': '#00d2ff',
+                'fill-color': '#00d2ff',
                 'fill-opacity': 0.5,
-                'fill-outline-color': '#ffffff'
+                'fill-outline-color': '#0055ff'
             }
         });
+
+        // Site yüklendiğinde konum takibini başlat
+        startTracking();
     });
 
     function startTracking() {
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition(pos => {
                 const { latitude, longitude } = pos.coords;
+                lastLocation = [longitude, latitude];
                 
-                // Koordinatı kare merkezine yuvarla (Grid Mantığı)
+                // Kırmızı noktayı senin konumuna koy
+                userMarker.setLngLat(lastLocation).addTo(map);
+
+                // GPS ilk defa bağlandıysa hemen oraya zoom yap
+                if (!isFirstLocationFound) {
+                    map.flyTo({ center: lastLocation, zoom: 17, speed: 1.5 });
+                    isFirstLocationFound = true;
+                }
+
+                // Grid (Kare Boyama) Mantığı
                 const gridX = Math.floor(longitude / (gridSize / 111)) * (gridSize / 111);
                 const gridY = Math.floor(latitude / (gridSize / 111)) * (gridSize / 111);
                 const zoneId = `${gridX},${gridY}`;
 
                 if (!myCapturedZones.has(zoneId)) {
                     myCapturedZones.add(zoneId);
-                    updateMapGrid(gridX, gridY);
+                    updateMapGrid();
                 }
 
-                map.flyTo({ center: [longitude, latitude], speed: 0.8 });
-                document.getElementById('status').innerText = "Aktif: Bölge taranıyor...";
+                document.getElementById('status').innerText = "Bağlandı, bölge aranıyor...";
                 document.getElementById('area-count').innerText = myCapturedZones.size;
 
-            }, null, { enableHighAccuracy: true });
+            }, (err) => {
+                // Eğer kullanıcı izin vermezse veya GPS kapalıysa
+                if(err.code === 1) {
+                    document.getElementById('status').innerText = "HATA: Konum İzni Reddedildi!";
+                } else {
+                    document.getElementById('status').innerText = "GPS Sinyali Aranıyor...";
+                }
+            }, { enableHighAccuracy: true });
+        } else {
+            document.getElementById('status').innerText = "Tarayıcı GPS desteklemiyor.";
         }
     }
 
-    function updateMapGrid(lng, lat) {
+    // Butona tıklandığında kamerayı konuma uçuran fonksiyon
+    function centerToLocation() {
+        if (lastLocation) {
+            map.flyTo({ center: lastLocation, zoom: 18, speed: 1.2 });
+        } else {
+            alert("Konumun henüz bulunamadı! Tarayıcından konum izni verdiğine ve telefonunun GPS (Konum) özelliğinin açık olduğuna emin ol.");
+        }
+    }
+
+    // Haritayı boyama fonksiyonu
+    function updateMapGrid() {
         const features = Array.from(myCapturedZones).map(id => {
             const [x, y] = id.split(',').map(Number);
             const offset = gridSize / 111;
