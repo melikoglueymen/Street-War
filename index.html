@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sokak Savaşı | Optimized</title>
+    <title>Street-War V1.7 | Pro</title>
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
@@ -11,26 +11,32 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <style>
         :root { --p: #00ff88; }
-        body { margin: 0; padding: 0; overflow: hidden; background: #050505; font-family: 'Inter', sans-serif; }
+        body { margin: 0; padding: 0; overflow: hidden; background: #050505; font-family: 'Segoe UI', sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         
-        .hud { position: absolute; z-index: 10; pointer-events: none; width: 100%; padding: 10px; box-sizing: border-box; }
+        /* Üst Panel */
+        .hud { position: absolute; z-index: 10; pointer-events: none; width: 100%; padding: 15px; box-sizing: border-box; }
         .top-ui { display: flex; justify-content: space-between; align-items: flex-start; }
-        .glass { background: rgba(10, 10, 10, 0.85); backdrop-filter: blur(8px); color: white; padding: 10px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); pointer-events: auto; }
+        .glass { background: rgba(10, 10, 10, 0.8); backdrop-filter: blur(10px); color: white; padding: 12px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); pointer-events: auto; }
         
-        .online-tag { background: #ff4757; color: white; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: bold; margin-bottom: 5px; display: inline-block; }
+        .status-tag { background: #ff4757; color: white; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; margin-bottom: 4px; display: inline-block; }
 
-        /* Renk Seçimi */
-        .settings-btn { position: absolute; bottom: 30px; right: 20px; width: 50px; height: 50px; border-radius: 50%; background: var(--p); display: flex; align-items: center; justify-content: center; z-index: 20; pointer-events: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: none; }
-        
-        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; color: white; padding: 30px; flex-direction: column; align-items: center; justify-content: center; }
+        /* Sağ Butonlar */
+        .side-btns { position: absolute; right: 15px; bottom: 100px; display: flex; flex-direction: column; gap: 15px; z-index: 20; }
+        .btn-circle { width: 55px; height: 55px; border-radius: 50%; border: none; background: #fff; color: #000; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); pointer-events: auto; }
+        .btn-loc { background: #fff; }
+        .btn-run { background: var(--p); color: #000; font-weight: bold; font-size: 14px; }
+        .btn-run.active { background: #ff4757; color: #fff; animation: pulse 1.5s infinite; }
+
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+        /* Profil ve Renk */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; color: white; padding: 30px; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .modal.active { display: flex; }
-        
-        .color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
-        .c-circle { width: 45px; height: 45px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: 0.3s; }
-        .c-circle.active { border-color: white; transform: scale(1.1); }
-        
-        input { background: #1a1a1a; border: 1px solid #333; color: white; padding: 12px; border-radius: 8px; width: 250px; text-align: center; font-size: 16px; }
+        .color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
+        .c-dot { width: 40px; height: 40px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+        .c-dot.active { border-color: white; transform: scale(1.2); }
+        input { background: #222; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; width: 250px; text-align: center; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -38,29 +44,30 @@
 <div id="map"></div>
 
 <div class="hud top-ui">
-    <div class="glass">
-        <div class="online-tag">● <span id="online-count">1</span> OYUNCU CANLI</div> <br>
+    <div class="glass" onclick="openSettings()">
+        <div class="status-tag">LIVE: <span id="online-count">1</span> OYUNCU</div> <br>
         <b id="nick-disp">Yükleniyor...</b> <br>
         <small id="area-count">Bölge: 0</small>
     </div>
-    <div class="glass" style="text-align: right;">
-        <span id="speed-disp" style="font-size: 20px; font-weight: bold;">0</span> <small>km/s</small>
+    <div class="glass">
+        <span id="speed-disp" style="font-size: 18px; font-weight: bold;">0</span> <small>km/s</small>
     </div>
 </div>
 
-<button class="settings-btn" onclick="openSettings()">🎨</button>
+<div class="side-btns">
+    <button class="btn-circle btn-loc" onclick="centerMe()">📍</button>
+    <button class="btn-circle btn-run" id="run-btn" onclick="toggleRun()">BAŞLA</button>
+</div>
 
 <div id="p-modal" class="modal">
-    <h3>PROFİLİNİ GÜNCELLE</h3>
-    <input type="text" id="nick-in" placeholder="Adını yaz...">
-    
-    <div class="color-grid" id="color-picker"></div>
-    
-    <button onclick="saveAndStart()" class="glass" style="width: 250px; background: var(--p); color: black; font-weight: bold; border: none;">KAYDET VE DEVAM ET</button>
+    <h3>PROFİL AYARLARI</h3>
+    <input type="text" id="nick-in" placeholder="Takma Adın">
+    <div class="color-grid" id="picker"></div>
+    <button onclick="saveProfile()" class="glass" style="width: 250px; background: var(--p); color: black; font-weight: bold;">KAYDET</button>
 </div>
 
 <script>
-    // Firebase Config (Senin Bilgilerin)
+    // Firebase Yapılandırması
     const firebaseConfig = {
       apiKey: "AIzaSyALFQsXRYUTTdEdZ_535gUR34mcTEKEqco",
       authDomain: "street-war-d530a.firebaseapp.com",
@@ -80,69 +87,86 @@
     
     let myColor = localStorage.getItem('sw_color') || '#00ff88';
     let myNick = localStorage.getItem('sw_nick') || 'Savaşçı';
+    let isRunning = false;
     let myTrail = [];
     let lastPos = null;
     let markers = {};
-    const colors = ['#00ff88', '#00d2ff', '#ff4757', '#f1c40f', '#9b59b6', '#ff9f43', '#ffffff', '#e84393'];
+    let myMarker = null;
 
-    // HARİTA (Uydu Görünümü Silindi - Dark Mode Eklendi)
     const map = new mapboxgl.Map({
         container: 'map',
-        style: 'mapbox://styles/mapbox/dark-v11', // Çok daha hızlı yüklenir
+        style: 'mapbox://styles/mapbox/dark-v11',
         center: [28.9784, 41.0082],
-        zoom: 17,
-        pitch: 45,
-        antialias: false // Performans için
+        zoom: 16,
+        pitch: 45
     });
 
     map.on('load', () => {
+        // İz ve Bölge Katmanları
         map.addSource('zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }});
         map.addLayer({ id: 'zone-layer', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.4 }});
 
         map.addSource('trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
-        map.addLayer({ id: 'trail-layer', type: 'line', source: 'trail', paint: { 'line-color': myColor, 'line-width': 3 }});
+        map.addLayer({ id: 'trail-layer', type: 'line', source: 'trail', paint: { 'line-color': myColor, 'line-width': 4, 'line-cap': 'round' }});
 
-        initGame();
+        initUI();
+        startGPS();
+        syncMultiplayer();
     });
 
-    function initGame() {
+    function initUI() {
         document.getElementById('nick-disp').innerText = myNick;
         document.documentElement.style.setProperty('--p', myColor);
-        
-        // Renk paletini oluştur
-        const picker = document.getElementById('color-picker');
+        const colors = ['#00ff88', '#00d2ff', '#ff4757', '#f1c40f', '#9b59b6', '#ffffff', '#ff9f43', '#e84393'];
+        const picker = document.getElementById('picker');
         colors.forEach(c => {
-            const div = document.createElement('div');
-            div.className = `c-circle ${c === myColor ? 'active' : ''}`;
-            div.style.background = c;
-            div.onclick = () => {
-                myColor = c;
-                document.querySelectorAll('.c-circle').forEach(el => el.classList.remove('active'));
-                div.classList.add('active');
-            };
-            picker.appendChild(div);
+            const d = document.createElement('div');
+            d.className = `c-dot ${c === myColor ? 'active' : ''}`;
+            d.style.background = c;
+            d.onclick = () => { myColor = c; document.querySelectorAll('.c-dot').forEach(el => el.classList.remove('active')); d.classList.add('active'); };
+            picker.appendChild(d);
         });
-
-        startTracking();
-        syncMultiplayer();
     }
 
-    function startTracking() {
+    function startGPS() {
         navigator.geolocation.watchPosition(pos => {
             const coord = [pos.coords.longitude, pos.coords.latitude];
-            document.getElementById('speed-disp').innerText = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+            const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+            document.getElementById('speed-disp').innerText = speed;
 
-            if (lastPos) {
+            // Kendi Marker'ın
+            if(!myMarker) {
+                myMarker = new mapboxgl.Marker({ color: myColor, scale: 0.8 }).setLngLat(coord).addTo(map);
+                map.flyTo({ center: coord, zoom: 17 });
+            } else {
+                myMarker.setLngLat(coord);
+            }
+
+            if (isRunning && lastPos) {
                 if (turf.distance(lastPos, coord) > 0.002) { 
                     myTrail.push(coord);
                     checkLoop(coord);
                     map.getSource('trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: myTrail }});
                 }
-            } else { map.easeTo({center: coord}); }
-            
+            }
             lastPos = coord;
-            db.ref('players/' + myId).set({ pos: coord, color: myColor, nick: myNick, lastSeen: Date.now() });
+            db.ref('players/' + myId).set({ pos: coord, color: myColor, nick: myNick, ts: Date.now() });
         }, null, { enableHighAccuracy: true });
+    }
+
+    function toggleRun() {
+        isRunning = !isRunning;
+        const btn = document.getElementById('run-btn');
+        if(isRunning) {
+            btn.innerText = "BİTİR";
+            btn.classList.add('active');
+            myTrail = [lastPos];
+        } else {
+            btn.innerText = "BAŞLA";
+            btn.classList.remove('active');
+            myTrail = [];
+            map.getSource('trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] }});
+        }
     }
 
     function checkLoop(current) {
@@ -150,46 +174,42 @@
         if (turf.distance(current, myTrail[0]) < 0.015) {
             const poly = turf.polygon([[...myTrail, myTrail[0]]]);
             db.ref('zones/' + myId + '_' + Date.now()).set({ geo: poly.geometry, color: myColor, owner: myId });
-            myTrail = [];
-            if(navigator.vibrate) navigator.vibrate(100);
+            toggleRun(); // Otomatik bitir ve alanı al
+            if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
     }
 
+    function centerMe() {
+        if(lastPos) map.flyTo({ center: lastPos, zoom: 18, pitch: 45 });
+    }
+
     function syncMultiplayer() {
-        // Gerçek zamanlı bölge ve oyuncu sayısı senkronu
         db.ref('zones').on('value', snap => {
             const val = snap.val() || {};
-            const feats = Object.values(val).map(z => ({ type: 'Feature', geometry: z.geo, properties: { color: z.color }}));
+            const feats = Object.values(val).map(z => ({ type: 'Feature', geometry: z.geo, properties: { color: z.color, owner: z.owner }}));
             map.getSource('zones').setData({ type: 'FeatureCollection', features: feats });
+            const myZones = feats.filter(f => f.properties.owner === myId).length;
+            document.getElementById('area-count').innerText = "Bölge: " + myZones;
         });
 
         db.ref('players').on('value', snap => {
             const players = snap.val() || {};
             const ids = Object.keys(players);
-            
-            // OYUNCU SAYISI (Aktif olanları say)
             document.getElementById('online-count').innerText = ids.length;
-
             ids.forEach(id => {
                 if(id === myId) return;
                 const p = players[id];
                 if(!markers[id]) {
-                    markers[id] = new mapboxgl.Marker({ color: p.color }).setLngLat(p.pos).addTo(map);
+                    markers[id] = new mapboxgl.Marker({ color: p.color, scale: 0.6 }).setLngLat(p.pos).addTo(map);
                 } else {
                     markers[id].setLngLat(p.pos);
                 }
             });
         });
-
-        // 2 dakika boyunca veri göndermeyenleri temizle (isteğe bağlı backend işlemi)
     }
 
-    function openSettings() {
-        document.getElementById('nick-in').value = myNick;
-        document.getElementById('p-modal').classList.add('active');
-    }
-
-    function saveAndStart() {
+    function openSettings() { document.getElementById('p-modal').classList.add('active'); }
+    function saveProfile() {
         myNick = document.getElementById('nick-in').value || 'Savaşçı';
         localStorage.setItem('sw_nick', myNick);
         localStorage.setItem('sw_color', myColor);
